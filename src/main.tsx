@@ -1,11 +1,11 @@
 // Learn more at developers.reddit.com/docs
 import {
-  CommentCreate,
+  //CommentCreate,
   //CommentCreateDefinition,
-  CommentDelete,
+  //CommentDelete,
   Devvit,
-  MenuItemOnPressEvent,
-  Post,
+  //MenuItemOnPressEvent,
+  //Post,
   //SettingScope,
   TriggerContext,
   //User,
@@ -337,6 +337,7 @@ Devvit.addTrigger({
   onEvent: async (event, context) => {
     //console.log(`A new comment was created: ${JSON.stringify(event)}`);
     const userId = event.author?.id!;
+    const username = event.author?.name!;
     const isMod = await authorIsMod(userId, context);
     const modsExempt = await context.settings.get("mods-exempt");
     //check if comment author is a mod and exempt them if the config setting is checked
@@ -459,7 +460,7 @@ Devvit.addTrigger({
         const commentLink = event.comment?.permalink!;
         var reason = getReasonForRemoval(commentRemovedReason, commentLimit);
         reason += getReasonScope(forAllPosts, forThisPostFlair, forThisPost);
-        pmUser(userId, subredditName, commentLink, postLink, reason, context);
+        pmUser(username, subredditName, commentLink, postLink, reason, context);
       }
       return;
     }
@@ -558,13 +559,15 @@ async function getAuthorsCommentCountInPost(
 
 // Helper function to PM a user when their comment is removed
 async function pmUser(
-  userId: string,
+  username: string,
   subredditName: string,
   commentLink: string,
   postLink: string,
   reason: string,
   context: TriggerContext
 ) {
+  if (username == "AutoModerator" || username == (subredditName + "-ModTeam"))
+    return; // If recipient is known bot, do nothing.
   const subjectText = `Your comment in r/${subredditName} was removed`;
   var messageText = `Hi, [your comment](${commentLink}) in [this post](${postLink}) was removed due to the following reason:\n\n`;
   const commentCountDisclaimer = `\n\nTo reduce your comment count so it is once again under the limit, you can delete your comment(s).`;
@@ -573,8 +576,6 @@ async function pmUser(
     messageText = messageText + reason + commentCountDisclaimer + inboxDisclaimer;
   else // any other reason besides diversify
     messageText = messageText + reason + inboxDisclaimer;
-  const thisUser = await context.reddit.getUserById(userId);
-  const username = thisUser?.username;
   if (username) {
     // If you want to send a PM as the subreddit, uncomment the line below and comment out the next line
     //await context.reddit.sendPrivateMessageAsSubreddit({
@@ -586,11 +587,13 @@ async function pmUser(
         //fromSubredditName: subredditName,
       });
     } catch (error) {
-      console.log(`Error sending PM to user ${username}: ${error}`);
+      if (error == "NOT_WHITELISTED_BY_USER_ERROR")
+        console.log(`Error: u/${username} likely has messaging disabled.`);
+      else console.log(`Error sending PM to user ${username}: ${error}`);
     }
   }
   else {
-    console.log(`Error: User with ID ${userId} not found. Cannot send PM.`);
+    console.log(`Error: User not found. Cannot send PM.`);
   }
 }
 

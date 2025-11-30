@@ -11,6 +11,12 @@ This app allows moderators to limit comments on posts in two distinct ways.
 
 ## Changelog
 
+### [0.0.30] (2025-11-30)
+
+#### Bug Fixes
+
+- Prevented app from messaging AutoModerator or the [subreddit]-ModTeam account.
+
 ### [0.0.29] (2025-11-22)
 
 #### Features
