@@ -11,7 +11,7 @@ This app allows moderators to limit comments on posts in two distinct ways.
 
 ## Changelog
 
-### [0.0.31] (2025-11-30)
+### [0.0.32] (2025-11-30)
 
 #### Bug Fixes
 

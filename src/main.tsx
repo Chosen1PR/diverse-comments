@@ -309,11 +309,10 @@ Devvit.addMenuItem({
 const settingsForm = Devvit.createForm(
   {
     title: 'Manage Diverse Comments',
-    description: `If you notice any issues with a particular post, try uninstalling and reinstalling the app to clear its data.`
-      + ` Change the settings below or cancel to close this pop-up.`,
+    description: `If you notice any issues with a particular post, try uninstalling and reinstalling the app to clear its data.`,
     fields: [],
     acceptLabel: 'Settings',
-    cancelLabel: 'Cancel',
+    cancelLabel: 'Close',
   },
   async (event, context) => {
     const subredditName = context.subredditName!;
