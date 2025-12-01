@@ -566,8 +566,9 @@ async function pmUser(
   reason: string,
   context: TriggerContext
 ) {
-  if (username == "AutoModerator" || username == (subredditName + "-ModTeam"))
-    return; // If recipient is known bot, do nothing.
+  const knownBots = [ "AutoModerator", subredditName + "-ModTeam", "saved-response" ]
+  if (knownBots.includes("username"))
+    return; // If recipient is a known bot, do nothing.
   const subjectText = `Your comment in r/${subredditName} was removed`;
   var messageText = `Hi, [your comment](${commentLink}) in [this post](${postLink}) was removed due to the following reason:\n\n`;
   const commentCountDisclaimer = `\n\nTo reduce your comment count so it is once again under the limit, you can delete your comment(s).`;
