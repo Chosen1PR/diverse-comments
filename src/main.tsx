@@ -1,22 +1,30 @@
 // Learn more at developers.reddit.com/docs
 import {
-  //CommentCreate,
-  //CommentCreateDefinition,
-  //CommentDelete,
   Devvit,
-  //MenuItemOnPressEvent,
-  //Post,
-  //SettingScope,
-  TriggerContext,
-  //User,
-  //useState,
 } from "@devvit/public-api";
+
+import {
+  getKeyForDiversifyPosts,
+  getKeyForPrunePosts,
+  commentLimitIsValid,
+  getKeyForComments,
+  containsFlair,
+  getReasonForRemoval,
+  getReasonScope,
+} from "./utils.js"
+
+import {
+  isDiversifyOnForThisPost,
+  isPruningOnForThisPost,
+  authorIsMod,
+  getAuthorsCommentCountInPost,
+  pmUser,
+} from "./utils-async.js"
 
 Devvit.configure({
   redis: true,
   redditAPI: true,
 });
-
 
 Devvit.addSettings([
   {
@@ -316,7 +324,7 @@ const settingsForm = Devvit.createForm(
   },
   async (event, context) => {
     const subredditName = context.subredditName!;
-    context.ui.navigateTo(`https://developers.reddit.com/r/${subredditName}/apps/diverse-comments`);
+    context.ui.navigateTo(`https://developers.reddit.com/r/${subredditName}/apps/${context.appName}`);
   }
 );
 
@@ -343,7 +351,6 @@ Devvit.addTrigger({
     const passedModCheck = !(isMod && modsExempt);
     //if (!passedModCheck)
     //  return;
-    const diversifyEnabled = await context.settings.get("enable-diversify")!; //check if diversification enabled
     // Beginning of temporary variables that will be needed if PM is sent to user
     var commentRemoved = false;
     var commentRemovedReason = "";
@@ -353,14 +360,15 @@ Devvit.addTrigger({
     var forThisPost = false;
     // End of temporary variables that will be needed if PM is sent to user
     
-    if (diversifyEnabled) {
-      const diversifyLimit = await context.settings.get("diversify-comment-limit");
+    // Check if diversification enabled
+    if (await context.settings.get("enable-diversify")) {
+      const diversifyLimit = (await context.settings.get("diversify-comment-limit")) as number;
       const diversifyLimitIsValid = commentLimitIsValid(diversifyLimit); //check if diversify comment limit is valid
       if (diversifyLimitIsValid) {
         //////////////////////////////////////////////////////////////////////////////////////////////
         ///////////////////////// Code for diversifying comments starts here /////////////////////////
         //////////////////////////////////////////////////////////////////////////////////////////////
-        commentLimit = Number(diversifyLimit);
+        commentLimit = diversifyLimit;
         const diversifyAllPosts = await context.settings.get("diversify-all-posts")!; //check if enabled for all posts
         forAllPosts = Boolean(diversifyAllPosts);
         const postId = event.post?.id!;
@@ -374,8 +382,7 @@ Devvit.addTrigger({
         forThisPostFlair = false;
         if (!forAllPosts && !forThisPost) {
           const flair = event.post?.linkFlair?.text ?? "";
-          const flairListTemp = await context.settings.get("diversify-flair-list");
-          const flairList = flairListTemp?.toString() ?? "";
+          const flairList = (await context.settings.get("diversify-flair-list") as string) ?? "";
           forThisPostFlair =
             flair != "" && flairList != "" && containsFlair(flair, flairList);
           //console.log(`forThisPostFlair is ${forThisPostFlair} for flair ${flair} and flairList ${flairList}`);
@@ -423,8 +430,7 @@ Devvit.addTrigger({
         forThisPostFlair = false;
         if (!forAllPosts && !forThisPost) {
           const flair = event.post?.linkFlair?.text ?? "";
-          const flairListTemp = await context.settings.get("prune-flair-list");
-          const flairList = flairListTemp?.toString() ?? "";
+          const flairList = (await context.settings.get("prune-flair-list") as string) ?? "";
           forThisPostFlair =
             flair != "" && flairList != "" && containsFlair(flair, flairList);
           //console.log(`forThisPostFlair is ${forThisPostFlair} for flair ${flair} and flairList ${flairList}`);
@@ -453,7 +459,7 @@ Devvit.addTrigger({
       // Optional: inform user via PM that they have reached the limit.
       const pmUserSetting = await context.settings.get("pm-user")!;
       if (pmUserSetting) {
-        const subredditName = event.subreddit?.name!;
+        const subredditName = context.subredditName!;
         //const postTitle = event.post?.title!;
         const postLink = event.post?.permalink!;
         const commentLink = event.comment?.permalink!;
@@ -509,173 +515,5 @@ Devvit.addTrigger({
     }
   },
 });
-
-// Helper function to get key for redis hash that handles comments on posts
-function getKeyForComments(postId: string) {
-  return `comments:${postId}`;
-}
-
-// Alternative helper function for redis key-value pair that handles comments on posts
-function getKeyForComments2(postId: string, userId: string) {
-  return `${postId}:${userId}`;
-}
-
-// Helper function for redis key-value pair that handles manual post diversification
-function getKeyForDiversifyPosts(postId: string) {
-  return `diversify:${postId}`;
-}
-
-// Helper function for redis key-value pair that handles manual post pruning
-function getKeyForPrunePosts(postId: string) {
-  return `prune:${postId}`;
-}
-
-// Helper function that tells you if the current comment limit in the config settings is even valid
-function commentLimitIsValid(commentLimit: string | number | boolean | string[] | undefined) {
-  return (
-    commentLimit != undefined &&
-    !Number.isNaN(commentLimit) &&
-    Number(commentLimit) >= 1
-  );
-}
-
-// Helper function for getting user's comment count
-async function getAuthorsCommentCountInPost(
-  key: string,
-  userId: string,
-  postId: string,
-  context: TriggerContext
-) {
-  var countString = (await context.redis.hGet(key, userId)) ?? "";
-  if (countString == "") {
-    // User hasn't commented here before. Adding redis hash with comment count of 0.
-    countString = "0";
-    await context.redis.hSet(key, { userId: countString });
-  }
-  const commentCount = Number(countString);
-  return commentCount;
-}
-
-// Helper function to PM a user when their comment is removed
-async function pmUser(
-  username: string,
-  subredditName: string,
-  commentLink: string,
-  postLink: string,
-  reason: string,
-  context: TriggerContext
-) {
-  const knownBots = [ "AutoModerator", subredditName + "-ModTeam", "saved-response" ]
-  if (knownBots.includes("username"))
-    return; // If recipient is a known bot, do nothing.
-  const subjectText = `Your comment in r/${subredditName} was removed`;
-  var messageText = `Hi, [your comment](${commentLink}) in [this post](${postLink}) was removed due to the following reason:\n\n`;
-  const commentCountDisclaimer = `\n\nTo reduce your comment count so it is once again under the limit, you can delete your comment(s).`;
-  const inboxDisclaimer = `\n\n*This inbox is not monitored. If you have any questions, please message the moderators of r/${subredditName}.*`;
-  if (reason.startsWith("- This subreddit has limited the total number"))
-    messageText = messageText + reason + commentCountDisclaimer + inboxDisclaimer;
-  else // any other reason besides diversify
-    messageText = messageText + reason + inboxDisclaimer;
-  if (username) {
-    // If you want to send a PM as the subreddit, uncomment the line below and comment out the next line
-    //await context.reddit.sendPrivateMessageAsSubreddit({
-    try {
-      await context.reddit.sendPrivateMessage({
-        subject: subjectText,
-        text: messageText,
-        to: username,
-        //fromSubredditName: subredditName,
-      });
-    } catch (error) {
-      if (error == "NOT_WHITELISTED_BY_USER_ERROR")
-        console.log(`Error: u/${username} likely has messaging disabled.`);
-      else console.log(`Error sending PM to user ${username}: ${error}`);
-    }
-  }
-  else {
-    console.log(`Error: User not found. Cannot send PM.`);
-  }
-}
-
-// Helper function for verifying if post flair is included in the list of flairs in the config settings
-function containsFlair(flair: string, flairList: string) {
-  flair = flair.trim(); //trim unneeded white space
-  var flairs = flairList.split(","); //separate flairs in list
-  for (let i = 0; i < flairs.length; i++) {
-    flairs[i] = flairs[i].trim(); //for each flair in the list, trim white space as well
-    if (flairs[i] == flair) //check if flairs match
-      return true;
-  }
-  //reached end of list, no match
-  return false;
-}
-
-// Helper function for determining if comment author is a moderator
-async function authorIsMod(userId: string, context: TriggerContext) {
-  const subreddit = await context.reddit.getCurrentSubredditName()!;
-  const modList = context.reddit.getModerators( { subredditName: subreddit }!);
-  const mods = await modList.all();
-  var isMod = false;
-  //for each mod in the list, check if their user id matches the comment author's user id
-  for (let i = 0; i < mods.length; i++) {
-    const modId = mods[i].id;
-    if (userId==modId) {
-      isMod = true;
-      break;
-    }
-  }
-  return isMod;
-}
-
-// Helper function to get reason for why a comment was removed
-function getReasonForRemoval(reasonWord: string, commentLimit?: number) {
-  var reason = "";
-  if (reasonWord=="diversify") {
-    reason += "- This subreddit has limited the total number of comments a single user can leave on a post";
-    if (commentLimit!=undefined)
-      reason += ` to ${commentLimit}.`;
-    else reason += ".";
-  }
-  else if (reasonWord=="prune") {
-    reason += "- This subreddit has limited the length of comment reply chains";
-    if (commentLimit!=undefined)
-      reason += ` to ${commentLimit}.`;
-    else reason += ".";
-  }
-  return reason;
-}
-
-// Helper function to get the full text for which post(s) the comment removal reason applies
-function getReasonScope(
-  forAllPosts: boolean,
-  forThisPostFlair: boolean,
-  forThisPost: boolean
-) {
-  var scope = "";
-  if (forAllPosts)
-    scope +=
-      " Currently, this limit applies across all posts in the subreddit.";
-  else if (forThisPostFlair)
-    scope +=
-      " Currently, this limit applies across all posts with this post's flair.";
-  else if (forThisPost)
-    scope +=
-      " Currently, this limit applies on this specific post, but not necessarily *only* this post.";
-  return scope;
-}
-
-async function isDiversifyOnForThisPost(context: Devvit.Context) {
-  const postId = context.postId!;
-  const key = getKeyForDiversifyPosts(postId);
-  const matches = await context.redis.exists(key);
-  return matches > 0;
-}
-
-async function isPruningOnForThisPost(context: Devvit.Context) {
-  const postId = context.postId!;
-  const key = getKeyForPrunePosts(postId);
-  const matches = await context.redis.exists(key);
-  return matches > 0;
-}
 
 export default Devvit;
