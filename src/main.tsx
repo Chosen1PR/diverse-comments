@@ -331,6 +331,7 @@ const settingsForm = Devvit.createForm(
 // Button for settings form
 Devvit.addMenuItem({
   label: "Diverse Comments",
+  description: "Settings",
   location: "subreddit", // can also be 'comment' or 'subreddit'
   forUserType: "moderator",
   onPress: async (event, context) => {
