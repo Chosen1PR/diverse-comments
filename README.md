@@ -11,6 +11,10 @@ This app allows moderators to limit comments on posts in two distinct ways.
 
 ## Changelog
 
+### [0.1.2] (2026-01-14)
+
+- New app icon.
+
 ### [0.1.1] (2025-12-24)
 
 - Added the word "Settings" to the subreddit-level menu item.

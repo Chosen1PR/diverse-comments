@@ -4,6 +4,9 @@
     "entry": "src/main.tsx",
     "triggers": ["onCommentCreate", "onCommentDelete"]
   },
+  "marketingAssets": {
+    "icon": "assets/dc-icon.png"
+  },
   "dev": {
     "subreddit": "CapitalOneBank"
   }
