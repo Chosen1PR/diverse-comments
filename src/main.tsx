@@ -324,7 +324,7 @@ const settingsForm = Devvit.createForm(
   },
   async (event, context) => {
     const subredditName = context.subredditName!;
-    context.ui.navigateTo(`https://developers.reddit.com/r/${subredditName}/apps/${context.appName}`);
+    context.ui.navigateTo(`https://developers.reddit.com/r/${subredditName}/apps/${context.appSlug}`);
   }
 );
 

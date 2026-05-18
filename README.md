@@ -11,6 +11,14 @@ This app allows moderators to limit comments on posts in two distinct ways.
 
 ## Changelog
 
+#### [0.1.3] (2026-05-18)
+
+#### Features
+
+- App icon now appears as app account's avatar.
+- Updated description on app profile page.
+- Updated Devvit CLI to 0.12.24.
+
 ### [0.1.2] (2026-01-14)
 
 - New app icon.
