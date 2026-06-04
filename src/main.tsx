@@ -3,23 +3,25 @@ import {
   Devvit,
 } from "@devvit/public-api";
 
-import {
-  getKeyForDiversifyPosts,
-  getKeyForPrunePosts,
-  commentLimitIsValid,
-  getKeyForComments,
-  containsFlair,
-  getReasonForRemoval,
-  getReasonScope,
-} from "./utils.js"
+import { commentLimitIsValid } from "./utils.js"
 
 import {
-  isDiversifyOnForThisPost,
-  isPruningOnForThisPost,
-  authorIsMod,
-  getAuthorsCommentCountInPost,
-  pmUser,
+  processCommentOnDiversify,
+  processCommentOnPrune,
+  isUserMod,
+  //isDiversifyOnForThisPost,
+  //isPruningOnForThisPost
 } from "./utils-async.js"
+
+import {
+  getAuthorsCommentCount,
+  deleteAuthorsCommentCount,
+  incrementAuthorsCommentCount,
+  getSeenStateForCommentCreate,
+  getSeenStateForCommentDelete,
+  updateDiversifyStateForPost,
+  updatePruneStateForPost
+} from "./redis.js"
 
 Devvit.configure({
   redis: true,
@@ -40,6 +42,26 @@ Devvit.addSettings([
           "Limits the number of comments a single user can leave on any given post.",
         defaultValue: false,
         scope: "installation",
+      },
+      {
+        type: "select",
+        name: "diversify-behavior",
+        label: "Diversification behavior",
+        helpText: "\"Report\" will flag comments for review without removing them. \"Filter\" will remove comments and send them for review. \"Remove\" will remove comments without sending them for review.",
+        options: [
+        {
+          "label": "Report",
+          "value": "report"
+        },
+        {
+          "label": "Filter",
+          "value": "filter"
+        },
+        {
+          "label": "Remove",
+          "value": "remove"
+        }],
+        defaultValue: ["filter"]
       },
       // Config setting for flag to diversify all posts
       {
@@ -95,6 +117,26 @@ Devvit.addSettings([
         helpText: "Limit how long nested comment chains can get.",
         scope: "installation",
       },
+      {
+        type: "select",
+        name: "prune-behavior",
+        label: "Pruning behavior",
+        helpText: "\"Report\" will flag comments for review without removing them. \"Filter\" will remove comments and send them for review. \"Remove\" will remove comments without sending them for review.",
+        options: [
+        {
+          "label": "Report",
+          "value": "report"
+        },
+        {
+          "label": "Filter",
+          "value": "filter"
+        },
+        {
+          "label": "Remove",
+          "value": "remove"
+        }],
+        defaultValue: ["filter"]
+      },
       // Config setting for pruning comments in all posts
       {
         type: "boolean",
@@ -132,7 +174,7 @@ Devvit.addSettings([
     label: "Message users regarding comment removal",
     defaultValue: false,
     helpText:
-      "Message users privately from the bot account (not modmail) when their comment has been removed and explain why.",
+      "Message users privately from the bot account (not modmail) when their comment has been removed (not filtered) and explain why.",
     scope: "installation",
   },
   // Config setting for exempting moderators to all rules
@@ -147,111 +189,20 @@ Devvit.addSettings([
   },
 ]);
 
-// Pop-up form for disabling comment diversification on a post
-const disableDiversifyForm = Devvit.createForm({
-  title: 'Success!',
-  description: "Comment diversification is now not forced on this specific post, but if diversification is on for all posts"
-    + " or for posts with this post's flair, comments in this post will still be diversified."
-    + " Please check your config settings for more details.",
-  fields: [],
-  acceptLabel: 'Ok',
-  cancelLabel: 'Cancel',
-}, values => { });
-
-// Pop-up form for disabling comment pruning on a post
-const disablePruneForm = Devvit.createForm({
-  title: 'Success!',
-  description: "Comment pruning is now not forced on this specific post, but if pruning is on for all posts"
-    + " or for posts with this post's flair, comments in this post will still be pruned."
-    + " Please check your config settings for more details.",
-  fields: [],
-  acceptLabel: 'Ok',
-  cancelLabel: 'Cancel',
-}, values => { });
-
-// Pop-up form for managing diverse comments on a post
-const manageDiversifyForm = Devvit.createForm(
-  (data) => (
-    {
-      title: 'Manage Diverse Comments',
-      fields: [
-      {
-        type: 'boolean',
-        name: 'diversifyThisPost',
-        label: 'Diversify this post',
-        defaultValue: data.diversifyThisPost,
-        helpText: `Controls the active state of whether or not to diversify comments on this specific post`
-          + `. NOTE: Even if this setting is off, comments may still be diversified if "Diversify all posts" is on`
-          + ` or if diversification is enabled for all posts with this post's flair.`,
-      }
-    ],
-    acceptLabel: 'Submit',
-    cancelLabel: 'Cancel',
-  }),
-  async (event, context) => {
-    const postId = context.postId!;
-    const key = getKeyForDiversifyPosts(postId);
-    if (event.values.diversifyThisPost) {
-      await context.redis.set(key, "1");
-      context.ui.showToast({
-        text: "Success! Comment diversification is now enabled on this post.",
-        appearance: "success",
-      });
-    }
-    else {
-      await context.redis.del(key, "1");
-      context.ui.showForm(disableDiversifyForm);
-    }
-  }
-);
-
-// Pop-up form for managing pruning comments on a post
-const managePruneForm = Devvit.createForm(
-  (data) => (
-    {
-      title: 'Manage Comment Pruning',
-      fields: [
-      {
-        type: 'boolean',
-        name: 'pruneThisPost',
-        label: 'Prune this post',
-        defaultValue: data.pruneThisPost,
-        helpText: `Controls the active state of whether or not to prune comments on this specific post`
-          + `. NOTE: Even if this setting is off, comments may still be pruned if "Prune all posts" is on`
-          + ` or if pruning is enabled for all posts with this post's flair.`,
-      }
-    ],
-    acceptLabel: 'Submit',
-    cancelLabel: 'Cancel',
-  }),
-  async (event, context) => {
-    const postId = context.postId!;
-    const key = getKeyForPrunePosts(postId);
-    if (event.values.pruneThisPost) {
-      await context.redis.set(key, "1");
-      context.ui.showToast({
-        text: "Success! Comment pruning is now enabled on this post.",
-        appearance: "success",
-      });
-    }
-    else {
-      await context.redis.del(key, "1");
-      context.ui.showForm(disablePruneForm);
-    }
-  }
-);
-
+// DEPRECATED
+// The below two menu items have been commented out because the functionality they enable was deprecated.
+// Leaving in the code for now in case I need to turn them back on.
+/*
 // Button on posts to manage comment limiting/diversification
 Devvit.addMenuItem({
   label: "Manage Diverse Comments",
   location: "post", // can also be 'comment' or 'subreddit'
   forUserType: "moderator",
-  onPress: async (event, context) => {
+  onPress: async (_event, context) => {
     const diversifyEnabled = await context.settings.get("enable-diversify")!; //check if diversification enabled
     const diversifyAllPosts = await context.settings.get("diversify-all-posts"); //check if enabled for all posts
     const diversifyLimit = await context.settings.get("diversify-comment-limit");
     const diversifyLimitIsValid = commentLimitIsValid(diversifyLimit); //check if diversify comment limit is valid
-
     if (!diversifyEnabled) {
       context.ui.showToast({
         //text: `Value of diversifyEnabled is: ${diversifyEnabled}`,
@@ -287,7 +238,6 @@ Devvit.addMenuItem({
     const pruneAllPosts = await context.settings.get("prune-all-posts"); //check if enabled for all posts
     const pruneLimit = await context.settings.get("prune-comment-limit");
     const pruneLimitIsValid = commentLimitIsValid(pruneLimit); //check if prune comment limit is valid
-
     if (!pruneEnabled) {
       context.ui.showToast({
         //text: `Value of pruneEnabled is: ${pruneEnabled}`,
@@ -312,163 +262,157 @@ Devvit.addMenuItem({
     }
   },
 });
+*/
 
-// Form that links to app settings page
-const settingsForm = Devvit.createForm(
-  {
-    title: 'Manage Diverse Comments',
-    description: `If you notice any issues with a particular post, try uninstalling and reinstalling the app to clear its data.`,
-    fields: [],
-    acceptLabel: 'Settings',
-    cancelLabel: 'Close',
-  },
+// DEPRECATED
+// Pop-up form for disabling comment diversification on a post
+const disableDiversifyForm = Devvit.createForm({
+  title: 'Success!',
+  description: "Comment diversification is now not forced on this specific post, but if diversification is on for all posts"
+    + " or for posts with this post's flair, comments in this post will still be diversified."
+    + " Please check your config settings for more details.",
+  fields: [],
+  acceptLabel: 'Ok',
+  cancelLabel: 'Cancel',
+}, values => { });
+
+// DEPRECATED
+// Pop-up form for disabling comment pruning on a post
+const disablePruneForm = Devvit.createForm({
+  title: 'Success!',
+  description: "Comment pruning is now not forced on this specific post, but if pruning is on for all posts"
+    + " or for posts with this post's flair, comments in this post will still be pruned."
+    + " Please check your config settings for more details.",
+  fields: [],
+  acceptLabel: 'Ok',
+  cancelLabel: 'Cancel',
+}, values => { });
+
+// DEPRECATED
+// Pop-up form for managing diverse comments on a post
+const manageDiversifyForm = Devvit.createForm(
+  (data) => (
+    {
+      title: 'Manage Diverse Comments',
+      fields: [
+      {
+        type: 'boolean',
+        name: 'diversifyThisPost',
+        label: 'Diversify this post',
+        defaultValue: data.diversifyThisPost,
+        helpText: `Controls the active state of whether or not to diversify comments on this specific post`
+          + `. NOTE: Even if this setting is off, comments may still be diversified if "Diversify all posts" is on`
+          + ` or if diversification is enabled for all posts with this post's flair.`,
+      }
+    ],
+    acceptLabel: 'Submit',
+    cancelLabel: 'Cancel',
+  }),
   async (event, context) => {
-    const subredditName = context.subredditName!;
-    context.ui.navigateTo(`https://developers.reddit.com/r/${subredditName}/apps/${context.appSlug}`);
+    const postId = context.postId!;
+    if (event.values.diversifyThisPost) {
+      await updateDiversifyStateForPost(postId, "1", context);
+      context.ui.showToast({
+        text: "Success! Comment diversification is now enabled on this post.",
+        appearance: "success",
+      });
+    }
+    else {
+      await updateDiversifyStateForPost(postId, "0", context);
+      context.ui.showForm(disableDiversifyForm);
+    }
   }
 );
 
-// Button for settings form
-Devvit.addMenuItem({
-  label: "Diverse Comments",
-  description: "Settings",
-  location: "subreddit", // can also be 'comment' or 'subreddit'
-  forUserType: "moderator",
-  onPress: async (event, context) => {
-    context.ui.showForm(settingsForm);
-  },
-});
+// DEPRECATED
+// Pop-up form for managing pruning comments on a post
+const managePruneForm = Devvit.createForm(
+  (data) => (
+    {
+      title: 'Manage Comment Pruning',
+      fields: [
+      {
+        type: 'boolean',
+        name: 'pruneThisPost',
+        label: 'Prune this post',
+        defaultValue: data.pruneThisPost,
+        helpText: `Controls the active state of whether or not to prune comments on this specific post`
+          + `. NOTE: Even if this setting is off, comments may still be pruned if "Prune all posts" is on`
+          + ` or if pruning is enabled for all posts with this post's flair.`,
+      }
+    ],
+    acceptLabel: 'Submit',
+    cancelLabel: 'Cancel',
+  }),
+  async (event, context) => {
+    const postId = context.postId!;
+    if (event.values.pruneThisPost) {
+      await updatePruneStateForPost(postId, "1", context);
+      context.ui.showToast({
+        text: "Success! Comment pruning is now enabled on this post.",
+        appearance: "success",
+      });
+    }
+    else {
+      await updatePruneStateForPost(postId, "0", context);
+      context.ui.showForm(disablePruneForm);
+    }
+  }
+);
 
-// Diversify comments: comment trigger handler
+// New comment trigger handler
 Devvit.addTrigger({
   event: "CommentCreate",
   onEvent: async (event, context) => {
     //console.log(`A new comment was created: ${JSON.stringify(event)}`);
+    // Event constants
+    const postId = event.post?.id!;
+    const commentId = event.comment?.id!;
+    const flair = event.post?.linkFlair?.text ?? "";
+    const parentId = event.comment?.parentId!;
+    const postLink = event.post?.permalink!;
+    const commentLink = event.comment?.permalink!;
     const userId = event.author?.id!;
     const username = event.author?.name!;
-    const isMod = await authorIsMod(userId, context);
-    const modsExempt = await context.settings.get("mods-exempt");
-    //check if comment author is a mod and exempt them if the config setting is checked
-    const passedModCheck = !(isMod && modsExempt);
-    //if (!passedModCheck)
-    //  return;
-    // Beginning of temporary variables that will be needed if PM is sent to user
+    // Check if we have seen this comment before
+    const seenState = await getSeenStateForCommentCreate(commentId, context);
+    if (seenState == 'seen' || seenState == 'error')
+      return; // If create event has already been processed, do nothing
+    const isMod = await isUserMod(username, context);
+    const modsExempt = await context.settings.get("mods-exempt") as boolean;
+    // Check if comment author is a mod and exempt them if the config setting is checked
+    const authorIsExempt = (isMod && modsExempt);
     var commentRemoved = false;
-    var commentRemovedReason = "";
-    var commentLimit = 0;
-    var forAllPosts = false;
-    var forThisPostFlair = false;
-    var forThisPost = false;
-    // End of temporary variables that will be needed if PM is sent to user
-    
     // Check if diversification enabled
-    if (await context.settings.get("enable-diversify")) {
-      const diversifyLimit = (await context.settings.get("diversify-comment-limit")) as number;
-      const diversifyLimitIsValid = commentLimitIsValid(diversifyLimit); //check if diversify comment limit is valid
-      if (diversifyLimitIsValid) {
-        //////////////////////////////////////////////////////////////////////////////////////////////
-        ///////////////////////// Code for diversifying comments starts here /////////////////////////
-        //////////////////////////////////////////////////////////////////////////////////////////////
-        commentLimit = diversifyLimit;
-        const diversifyAllPosts = await context.settings.get("diversify-all-posts")!; //check if enabled for all posts
-        forAllPosts = Boolean(diversifyAllPosts);
-        const postId = event.post?.id!;
-        const diversifyMatches = await context.redis.exists(
-          getKeyForDiversifyPosts(postId)
+    const diversifyEnabled = await context.settings.get("enable-diversify") as boolean;
+    if (diversifyEnabled) {
+      commentRemoved = await processCommentOnDiversify(
+        commentId,
+        commentLink,
+        postId,
+        postLink,
+        userId,
+        username,
+        flair,
+        authorIsExempt,
+        context
+      );
+    }
+    if (!commentRemoved) {
+      const pruneEnabled = await context.settings.get("enable-prune") as boolean; //check if pruning enabled
+      if (pruneEnabled) {
+        commentRemoved = await processCommentOnPrune(
+          commentId,
+          commentLink,
+          parentId,
+          postId,
+          postLink,
+          username,
+          flair,
+          authorIsExempt,
+          context
         );
-        forThisPost = diversifyMatches > 0; //check if manually enabled for this specific post
-        const commentId = event.comment?.id!;
-
-        //If not enabled for all posts and not enabled manually for this specific post, then check post flair.
-        forThisPostFlair = false;
-        if (!forAllPosts && !forThisPost) {
-          const flair = event.post?.linkFlair?.text ?? "";
-          const flairList = (await context.settings.get("diversify-flair-list") as string) ?? "";
-          forThisPostFlair =
-            flair != "" && flairList != "" && containsFlair(flair, flairList);
-          //console.log(`forThisPostFlair is ${forThisPostFlair} for flair ${flair} and flairList ${flairList}`);
-        }
-        // If everything looks good, this is where comment limiting/diversification begins
-        if (forAllPosts || forThisPost || forThisPostFlair) {
-          // Step 1: Get user's comment count in post.
-          const key = getKeyForComments(postId); //key is comments:<postId>, field is userId
-          const commentCount = await getAuthorsCommentCountInPost(
-            key,
-            userId,
-            postId,
-            context
-          );
-          // Step 2: If user is over limit, remove comment.
-          if (commentCount >= commentLimit && passedModCheck) { // Mod check here will depend on the "mods exempt" config setting.
-            await context.reddit.remove(commentId, false);
-            commentRemoved = true;
-            commentRemovedReason = "diversify";
-          }
-          // Step 3: Increment user's comment count in post.
-          await context.redis.hIncrBy(key, userId, 1);
-          // Even if this comment was removed in Step 2, any new comments will still increment the comment count for this user.
-          // For the count to be decremented, the user must delete their comment and "update with comment deletes" must be enabled.
-        }
       }
-    }
-    const pruneEnabled = await context.settings.get("enable-prune")!; //check if pruning enabled
-    if (pruneEnabled && !commentRemoved) {
-      const pruneLimit = await context.settings.get("prune-comment-limit");
-      const pruneLimitIsValid = commentLimitIsValid(pruneLimit); //check if diversify comment limit is valid
-      if (pruneLimitIsValid) {
-        /////////////////////////////////////////////////////////////////////////////////////////
-        ///////////////////////// Code for pruning comments starts here /////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////////////
-        commentLimit = Number(pruneLimit);
-        const pruneAllPosts = await context.settings.get("prune-all-posts")!; //check if enabled for all posts
-        forAllPosts = Boolean(pruneAllPosts);
-        const postId = event.post?.id!;
-        const pruneMatches = await context.redis.exists(getKeyForPrunePosts(postId));
-        forThisPost = pruneMatches > 0; //check if manually enabled for this specific post
-        const commentId = event.comment?.id!;
-
-        //If not enabled for all posts and not enabled manually for this specific post, then check post flair.
-        forThisPostFlair = false;
-        if (!forAllPosts && !forThisPost) {
-          const flair = event.post?.linkFlair?.text ?? "";
-          const flairList = (await context.settings.get("prune-flair-list") as string) ?? "";
-          forThisPostFlair =
-            flair != "" && flairList != "" && containsFlair(flair, flairList);
-          //console.log(`forThisPostFlair is ${forThisPostFlair} for flair ${flair} and flairList ${flairList}`);
-        }
-        // If everything looks good, this is where comment pruning begins
-        if (forAllPosts || forThisPost || forThisPostFlair) {
-          var counter = 1;
-          var id = event.comment?.parentId!;
-          // Keep getting parent IDs until you get to "t3_[whatever]" which indicates the parent post,
-          // or until you get to the installation's prune limit.
-          while (id.startsWith("t1_") && counter <= commentLimit) {
-            const comment = await context.reddit.getCommentById(id)!;
-            id = comment.parentId;
-            counter++;
-          }
-          // If the limit of comment tree growth has been reached, remove comment
-          if (counter > commentLimit && passedModCheck) { // Mod check here will depend on the "mods exempt" config setting.
-            context.reddit.remove(commentId, false);
-            commentRemoved = true;
-            commentRemovedReason = "prune";
-          }
-        }
-      }
-    }
-    if (commentRemoved) {
-      // Optional: inform user via PM that they have reached the limit.
-      const pmUserSetting = await context.settings.get("pm-user")!;
-      if (pmUserSetting) {
-        const subredditName = context.subredditName!;
-        //const postTitle = event.post?.title!;
-        const postLink = event.post?.permalink!;
-        const commentLink = event.comment?.permalink!;
-        var reason = getReasonForRemoval(commentRemovedReason, commentLimit);
-        reason += getReasonScope(forAllPosts, forThisPostFlair, forThisPost);
-        pmUser(username, subredditName, commentLink, postLink, reason, context);
-      }
-      return;
     }
   },
 });
@@ -478,25 +422,23 @@ Devvit.addTrigger({
   event: "CommentDelete",
   onEvent: async (event, context) => {
     //console.log(`A new comment was deleted: ${JSON.stringify(event)}`);
-    
+    const eventSource = event.source;
+    const source = eventSource.valueOf(); // 3 = mod; 2 = admin; 1 = user; 0 = unknown; -1 = unrecognized
+    if (source != 1)
+      return; // If a comment was not deleted by its author, don't do anything.
     const diversifyEnabled = await context.settings.get("enable-diversify")!; //check if diversification enabled
     if (!diversifyEnabled)
       return; // If not enabled, don't do anything.
     const updateDelete = await context.settings.get("update-comment-delete"); //check if update with delete enabled
     if (!updateDelete)
       return; // If not enabled, don't do anything.
-    const eventSource = event.source;
-    const source = eventSource.valueOf(); // 3 = mod; 2 = admin; 1 = user; 0 = unknown; -1 = unrecognized
-    if (source != 1)
-      return; // If a comment was not deleted by its author, don't do anything.
-
+    const commentId = event.commentId!;
+    const seenState = await getSeenStateForCommentDelete(commentId, context);
+    if (seenState == 'seen' || seenState == 'error')
+      return; // If delete event has already been seen, do nothing
     // If we got here, then comment diversification is enabled and "update with comment delete" is enabled.
     const userId = event.author?.id!;
-    //const isMod = await authorIsMod(userId, context);
-    //const modsExempt = await context.settings.get("mods-exempt");
-    //check if comment author is a mod and exempt them if the config setting is checked
-    //if (isMod && modsExempt)
-    //  return;
+    const postId = event.postId!;
     const diversifyLimit = await context.settings.get("diversify-comment-limit");
     const diversifyLimitIsValid = commentLimitIsValid(diversifyLimit); //check if diversify comment limit is valid
     if (!diversifyLimitIsValid) // If not valid, don't do anything.
@@ -504,16 +446,11 @@ Devvit.addTrigger({
     // If we got here, then comment diversification is enabled and "update with comment delete" is enabled.
     // It's not necessary to check if diversification is enabled for this post, because even if it's not,
     // then we only make one redis call which will return nothing, and no action will be taken.
-    const postId = event.postId!;
-    const key = getKeyForComments(postId); //key is comments:<postId>
-    const countString = await context.redis.hGet(key, userId) ?? ""; // Look up user's comment count in this post
-    if (countString != "") { // If user has a comment count in this post, update it.
-      const commentCount = Number(countString);
-      if (commentCount == 1) // If this was the last comment, delete the redis hash for this user.
-        await context.redis.hDel(key, [userId]);
-      else if (commentCount > 1) // If there are more comments, just decrement the count by 1.
-        await context.redis.hIncrBy(key, userId, -1);
-    }
+    const commentCount = await getAuthorsCommentCount(userId, postId, context);
+    if (commentCount == 1) // If this was the last comment, delete the redis hash for this user.
+      await deleteAuthorsCommentCount(userId, postId, context);
+    else if (commentCount > 1) // If there are more comments, just decrement the count by 1.
+      await incrementAuthorsCommentCount(userId, postId, -1, context);
   },
 });
 

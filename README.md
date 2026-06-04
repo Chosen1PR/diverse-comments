@@ -2,14 +2,26 @@
 
 This app allows moderators to limit comments on posts in two distinct ways.
 
-- Limit how many comments a single user can leave on a specific post. Doing this can lead to a more diverse variety of comments, since they won't all be coming from the same people.
-- Limit how many comments can be on a comment reply chain. This chops off or "prunes" the end of comment trees once the limit has been reached.
-- Configure comment removal for all posts, no posts, individual posts, or posts with a specific post flair.
-- Configure whether or not to message users privately from the bot account (not modmail) when their comment is removed and explain why.
+1. Limit how many comments per post each user can make, configurable by post flair. Doing this can lead to a more diverse variety of comments, since they won't all be coming from the same users.
+2. Limit how many comments can be on a comment reply chain. This chops off or "prunes" the end of comment trees once the limit has been reached.
+
+Additionally, mods can choose whether to:
+
+- Limit comments for all posts, no posts, or posts with a specific flair.
+- Report, filter, or remove comments.
+- Message users privately from the bot account (not modmail) when their comment is removed (not filtered) and explain why.
 
 ---
 
 ## Changelog
+
+#### [0.1.4] (2026-06-04)
+
+- Fixed an issue that caused some comments past the diversification limit to not be removed.
+- Improved resilience to Developer Platform issues that may fire duplicate triggers for a single comment. This ensures the app accurately tracks comments and avoids removing legitimate ones as duplicates.
+- Removed the Settings menu item at subreddit level for a cleaner menu. Settings are still accessible from developers.reddit.com.
+- Deprecated the ability to limit comments on *specific* posts from a menu item due to disuse. You can still limit comments on all posts or only those with a specific flair.
+- Updated Devvit CLI to 0.13.2.
 
 #### [0.1.3] (2026-05-18)
 
