@@ -61,11 +61,7 @@ export async function processCommentOnDiversify(
   // If everything looks good, this is where comment limiting/diversification begins
   if (forAllPosts || forThisPost || forThisPostFlair) {
     // Step 1: Get user's comment count in post.
-    const commentCount = await getAuthorsCommentCount(
-      userId,
-      postId,
-      context
-    );
+    const commentCount = await getAuthorsCommentCount(userId, postId, context);
     // Step 2: If user is over limit, remove comment.
     if (commentCount >= commentLimit && !authorIsExempt) { // Mod check here will depend on the "mods exempt" config setting.
       commentRemoved = await actionCommentAccordingToDiversifyBehavior(commentId, context);
