@@ -9,22 +9,29 @@ Additionally, mods can choose whether to:
 
 - Limit comments for all posts, no posts, or posts with a specific flair.
 - Report, filter, or remove comments.
-- Message users privately from the bot account (not modmail) when their comment is removed (not filtered) and explain why.
+- Message users privately from the bot account (not modmail) when their comment is removed (not filtered) and explain why. Equivalent to an Automod notification.
 
 ---
 
 ## Changelog
 
-#### [0.1.4] (2026-06-04)
+### [0.1.4] (2026-06-04)
 
-- Fixed an issue that caused some comments past the diversification limit to not be removed.
-- Improved resilience to Developer Platform issues that may fire duplicate triggers for a single comment. This ensures the app accurately tracks comments and avoids removing legitimate ones as duplicates.
+#### Features
+
+- Added the ability to report or filter comments instead of removing them.
+- Deprecated the ability to limit comments on *specific* posts from a menu item due to disuse. Mods can still limit comments on all posts or only those with specific flairs.
 - Removed the Settings menu item at subreddit level for a cleaner menu. Settings are still accessible from developers.reddit.com.
-- Deprecated the ability to limit comments on *specific* posts from a menu item due to disuse. Mods can still limit comments on all posts or only those with a specific flair.
+
+#### Bug Fixes
+
+- Fixed an issue that caused some comments past the per-post limit to not be removed.
+- Improved resilience to Developer Platform issues that may fire duplicate triggers for a single comment. This ensures the app accurately tracks comments and avoids removing legitimate ones as duplicates.
 - Updated Devvit CLI to 0.13.2.
 - Updated dependencies to address vulnerabilities.
+- Rewrote and rearranged large sections of code for easier readability and maintainability.
 
-#### [0.1.3] (2026-05-18)
+### [0.1.3] (2026-05-18)
 
 #### Features
 

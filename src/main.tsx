@@ -61,7 +61,7 @@ Devvit.addSettings([
           "label": "Remove",
           "value": "remove"
         }],
-        defaultValue: ["filter"]
+        defaultValue: ["remove"]
       },
       // Config setting for flag to diversify all posts
       {
