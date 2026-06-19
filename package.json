@@ -2,7 +2,6 @@
   "private": true,
   "name": "diverse-comments",
   "version": "0.0.0",
-  "license": "BSD-3-Clause",
   "type": "module",
   "dependencies": {
     "@devvit/public-api": "0.13.4",

@@ -15,7 +15,7 @@ Additionally, mods can choose whether to:
 
 ## Changelog
 
-### [0.1.5] (2026-06-19)
+### [0.1.6] (2026-06-19)
 
 - Fixed an issue that caused filtered comments to still be visible to other users while in the mod queue.
 
