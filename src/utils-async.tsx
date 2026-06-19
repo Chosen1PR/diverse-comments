@@ -228,7 +228,7 @@ async function actionCommentAccordingToDiversifyBehavior(commentId: string, cont
     if (comment) await context.reddit.report(comment, { reason: "User's comment limit reached" });
   }
   else if (behavior == "filter") {
-    await filterComment(commentId as CommentId, "User's comment count limit reached", true, context);
+    await filterComment(commentId as CommentId, "User's comment count limit reached", false, context);
   }
   else if (behavior == "remove") {
     await context.reddit.remove(commentId, false);
@@ -248,7 +248,7 @@ async function actionCommentAccordingToPruneBehavior(commentId: string, context:
     if (comment) await context.reddit.report(comment, { reason: "Comment reply chain limit reached" });
   }
   else if (behavior == "filter") {
-    await filterComment(commentId as CommentId, "Comment reply chain limit reached", true, context);
+    await filterComment(commentId as CommentId, "Comment reply chain limit reached", false, context);
   }
   else if (behavior == "remove") {
     await context.reddit.remove(commentId, false);
@@ -265,7 +265,7 @@ export async function filterComment(commentId: CommentId, reason: string, keep: 
     await ExtDevvit.redditAPIPlugins.Moderation.Filter({ id: commentId, keep: keep, reason: reason, }, context.metadata);
   }
   catch (error) {
-    console.log(`Could not filter comment:\n${error}`);
+    console.log(`Could not filter comment with id ${commentId}:\n${error}`);
   }
 }
 
