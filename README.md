@@ -1,6 +1,6 @@
 ## Features
 
-Formerly known as Diverse Comments, this app allows moderators to limit comments on posts in two distinct ways.
+Formerly known as Diverse Comments, this tool allows moderators to limit comments on posts in two distinct ways.
 
 1. Limit how many comments per post each user can make, configurable by post flair. Doing this can lead to a more diverse variety of comments, since they won't all be coming from the same users.
 2. Limit how many comments can be on a comment reply chain. This chops off or "prunes" the end of comment trees once the limit has been reached.
@@ -15,7 +15,7 @@ Additionally, mods can choose whether to:
 
 ## Changelog
 
-### [0.1.7] (2026-06-19)
+### [0.1.8] (2026-06-19)
 
 - Fixed an issue that caused filtered comments to still be visible to other users while in the mod queue.
 
